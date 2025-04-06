@@ -27,7 +27,55 @@ static void test_bad_value(str json) {
   check(!json_value(json, end));
 }
 
+typedef struct {
+  json_t next;
+  char* string;
+  unsigned string_size;
+} json_string_alloc_result;
+
+static json_string_alloc_result json_string_alloc(str json, str end) {
+  if (!(json = json_string_begin(json, end)))
+    return (json_string_alloc_result) {};
+  char* buf = 0;
+  u32 buf_ofs = 0;
+  while (1) {
+    u32 buf_size = buf_ofs + 4096;
+    buf = realloc(buf, buf_size);
+    json_string_result ans = json_string(json, end, buf + buf_ofs, buf + buf_size);
+    if (ans.type == json_string_error) {
+      free(buf);
+      return (json_string_alloc_result) {};
+    }
+    buf_ofs = (u32) (ans.dst_out - buf);
+    if (ans.type == json_string_done)
+      return (json_string_alloc_result) {ans.json_out, buf, buf_ofs};
+    json = ans.json_out;
+  }
+}
+
 int main() {
+  {
+    str json = "\"hello";
+    str end = json + strlen(json);
+    json_string_alloc_result ans = json_string_alloc(json, end);
+    check(!ans.next);
+  }
+  {
+    str json = "\"hello\\nworld! wiehhjfh fdhsajkl q fdhsjkahewq dsh fdkahf fhsajh l \\t fhjdslhf dsahjf ksdajf hjak hfdskhjkahjfks appleeeef\\bfruit\"";
+    str end = json + strlen(json);
+    json_string_alloc_result ans = json_string_alloc(json, end);
+    check(ans.next);
+    #define expect "hello\nworld! wiehhjfh fdhsajkl q fdhsjkahewq dsh fdkahf fhsajh l \t fhjdslhf dsahjf ksdajf hjak hfdskhjkahjfks appleeeef\bfruit"
+    memcmp(ans.string, expect, sizeof(expect) - 1);
+    #undef expect
+    free(ans.string);
+  }
+
+  {
+    str val = "\"hello\\nworld!\"";
+    check(json_string_equal(val, val + strlen(val), "hello\nworld!"));
+  }
+
   test_value("{\"key\": \"value\"}");
   test_value("true");
   test_value("false");
@@ -68,7 +116,7 @@ int main() {
     str end = json + strlen(json);
     json = json_object_get(json, end, "attributes");
     json = json_object_get(json, end, "action");
-    check(starts_with(json, "\"approved\""));
+    check(json_string_equal(json, end, "approved"));
   }
   {
     str json = "31451";

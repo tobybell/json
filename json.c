@@ -1,3 +1,5 @@
+#include "json.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -130,6 +132,52 @@ static char escape_code(char c) {
     case 't': return 0x9;
     default: return 0;
   }
+}
+
+str json_string_begin(str i, str end) {
+  guard(i < end && *i == '"');
+  return i + 1;
+}
+
+json_string_result json_string(
+    str i, str end, char* dst, char* dst_end) {
+#undef guard
+#define guard(c) if (!(c)) return (json_string_result) {}
+  while (1) {
+    guard(i < end);
+    if (*i == '"')
+      return (json_string_result) {json_string_done, i + 1, dst};
+    char c = *i++;
+    if (c == '\\') {
+      guard(i < end);
+      c = escape_code(*i++);
+      guard(c);
+    }
+    *dst++ = c;
+    if (dst_end <= dst)
+      return (json_string_result) {json_string_not_done, i, dst};
+  }
+#undef guard
+#define guard(c) if (!(c)) return 0
+}
+
+bool json_string_equal(str i, str end, str key) {
+  guard(i < end && *i == '"');
+  ++i;
+  for (; *key; ++i, ++key) {
+    guard(i < end);
+    if (*i == '"')
+      return 0;
+    if (*i == '\\') {
+      guard(++i < end);
+      if (escape_code(*i) != *key)
+        return 0;
+    } else if (*i != *key) {
+      return 0;
+    }
+  }
+  guard(i < end);
+  return *i == '"';
 }
 
 static str string_equal(str i, str end, str key, bool* equal) {
